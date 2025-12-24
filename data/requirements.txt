@@ -1,0 +1,12 @@
+
+faiss-cpu
+jieba
+langchain
+langchain-community
+matplotlib
+numpy
+openai
+pandas
+torch
+python==3.10.18
+
