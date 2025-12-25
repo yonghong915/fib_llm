@@ -1,0 +1,9 @@
+input_file: input.txt
+output_file: output.txt
+batch_size: 1
+resume:
+  excel_file: toubiao.xlsx
+  excel_sheet: 人员清单
+  word_template: template.docx
+  output_dir: C:/Users/fangyh/Desktop/resumes/output
+  json_path: pro_data.json

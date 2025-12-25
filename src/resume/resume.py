@@ -17,13 +17,60 @@ WORD_TEMPLATE = "resume_template.docx"   # Word模板路径
 SAVE_DIR = "C:/Users/fangyh/Desktop/resumes/"   # 生成文件保存目录
 NULL_DEFAULT = "无"               # 空值默认填充内容
 CURR_PATH = os.path.dirname(os.path.abspath(__file__))
-EXCEL_FILE = os.path.join(CURR_PATH, EXCEL_FILE)
-WORD_TEMPLATE = os.path.join(CURR_PATH, WORD_TEMPLATE)
-JSON_PATH = os.path.join(CURR_PATH, "pro_data.json")
+EXCEL_FILE = os.path.join(CURR_PATH, "../../data/resume/"+ EXCEL_FILE)
+WORD_TEMPLATE = os.path.join(CURR_PATH, "../../data/resume/"+WORD_TEMPLATE)
+JSON_PATH = os.path.join(CURR_PATH, "../../data/resume/"+"pro_data.json")
 
 logger = logging.getLogger(__name__)
 FORMAT='%(asctime)s - %(funcName)s - %(levelname)s - %(message)s'
 logging.basicConfig(filename=None,filemode='a',format=FORMAT, encoding='utf-8',level=logging.INFO)
+
+from src import JSONReader
+class Resume:
+    """
+    Resume类，生成简历
+    """
+    def __init__(self, template_path: str, json_path: str):
+        self.template_path = template_path
+        self.json_path = json_path
+        self.template = self.load_template()
+        self.json_data = self.load_json()
+
+    def load_template(self) -> str:
+        """
+        加载模板
+        :return: 模板内容
+        """
+    
+    def load_json(self) -> dict:
+        """
+        加载JSON数据
+        :return: JSON数据
+        """
+    
+    def generate_prompt(self, json_data: dict) -> str:
+        """
+        生成提示
+        :param json_data: JSON数据
+        :return: 提示内容
+        """
+    
+    def generate_response(self, prompt: str) -> str:
+        """
+        生成响应
+        :param prompt: 提示内容
+        :return: 响应内容
+        """
+    
+    def execute(self) -> str:
+        """
+        执行
+        :param json_data: JSON数据
+        :return: 响应内容
+        """
+        prompt = self.generate_prompt("json_data")
+        response = self.generate_response(prompt)
+        return response
 # ====================== 2. 工具函数（通用，无需修改） ======================
 def init_dir(dir_path):
     """初始化保存目录，不存在则创建"""
@@ -122,7 +169,7 @@ def main():
         if not os.path.exists(save_path):
            os.makedirs(save_path)
 
-        FILE_NAME_RULE = "row['序号']-{row['级别']-{row['职位']-{row['姓名'].docx"  # 生成文件命名规则
+        FILE_NAME_RULE = str(row['序号'])+"-"+row['级别']+"-"+row['职位']+"-"+row['姓名']+".docx" # 生成文件命名规则
         save_path= save_path+"/"+ FILE_NAME_RULE
 
         fill_word_template(WORD_TEMPLATE,row,resume_data,save_path)
