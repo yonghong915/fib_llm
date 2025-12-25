@@ -6,11 +6,12 @@ import logging
 import json
 import random
 import time
+from datetime import datetime
 # ====================== 1. 配置项（改这里！适配你的业务） ======================
 # Excel配置
 EXCEL_FILE = "toubiao.xlsx"       # Excel文件路径
 EXCEL_SHEET = "人员清单"            # 工作表名
-EXCEL_FIELDS = ["序号", "工号", "姓名", "身份证","性别","年龄","职位","级别","职称","毕业院校","专业","学历","司龄","担任现有职务年限","服务地点","编写人"]  # Excel要提取的字段
+EXCEL_FIELDS = ["序号", "工号", "姓名", "身份证","性别","年龄","职位","级别","职称","毕业院校","专业","学历","毕业时间","入职时间","司龄","担任现有职务年限","服务地点","编写人"]  # Excel要提取的字段
 EXCEL_KEY = "工号" 
 # Word配置
 WORD_TEMPLATE = "resume_template.docx"   # Word模板路径
@@ -25,7 +26,6 @@ logger = logging.getLogger(__name__)
 FORMAT='%(asctime)s - %(funcName)s - %(levelname)s - %(message)s'
 logging.basicConfig(filename=None,filemode='a',format=FORMAT, encoding='utf-8',level=logging.INFO)
 
-from src import JSONReader
 class Resume:
     """
     Resume类，生成简历
@@ -83,6 +83,7 @@ def get_excel_data():
     df = df.fillna(NULL_DEFAULT).drop_duplicates(subset=[EXCEL_KEY])  # 去重+补空值
     return df
 
+from dateutil.relativedelta import relativedelta
 def get_resume_count(level):
     """获取简历数量"""
     select_count = 3
@@ -98,13 +99,65 @@ def get_resume_count(level):
 
 def get_resume_list(row,raw_data):
     """获取简历列表"""
+    graduation_date = row["毕业时间"]
+    entry_date = row["入职时间"]
+    # 获取当前日期
+    current_date = datetime.now()
+    delta = relativedelta(current_date,graduation_date)
+    total_months = delta.years * 12 + delta.months
+    # print(f"从{graduation_date}到{current_date}的月数差是：{total_months}")
     select_count  = get_resume_count(row["级别"])
+    
+    #大概平均每个项目多少个月
+    project_months = int(total_months / select_count)
+    # logger.info(f"项目平均月数是：{project_months}")
+    # new_date = graduation_date + relativedelta(months=project_months)
+    # logger.info(f"预计项目结束日期为：{new_date}")
+    # formatted_date = new_date.strftime("%Y/%m")
+    # print(formatted_date)
+    role = row["职位"]
+    # logger.info(f"毕业时间：{graduation_date}，入职时间：{entry_date}")
     random_data = random.sample(raw_data, select_count)
-    for item in random_data:
+    for idx,item in enumerate(random_data):
         project_scale = random.randint(10, 40) #项目规模
         mgr_cnt = int(project_scale / 5) #管理团队人数
         item["项目规模"] = project_scale
         item["管理团队人数"] = mgr_cnt
+        if idx == 0:
+            start_date = (current_date - relativedelta(months=project_months))
+            end_date = current_date
+            project_status = "在执行"
+        elif idx == select_count -1:
+            end_date = start_date
+            start_date = graduation_date
+        else:
+            end_date = start_date
+            start_date = (end_date - relativedelta(months=project_months))
+            project_status = "已完成"
+        
+         # 如果入职时间在开始时间与结束时间之间，则将项目状态设置为"进行中"
+        # print(f"项目的开始时间是{start_date}，结束时间是{end_date}，入职时间是{entry_date}")
+        if start_date <= entry_date and entry_date <= end_date:
+            delta = relativedelta(entry_date,start_date)
+            start_months = delta.years * 12 + delta.months
+             
+            delta = relativedelta(end_date,entry_date)
+            end_months = delta.years * 12 + delta.months
+            if start_months >= end_months:
+                end_date = entry_date
+                print(random_data[idx -1]["开始时间"])
+                random_data[idx -1]["开始时间"] = entry_date.strftime("%Y/%m")
+            else:
+                start_date = entry_date
+        item["开始时间"] = start_date.strftime("%Y/%m")
+        item["结束时间"] = end_date.strftime("%Y/%m")
+        item["项目状态"] = project_status
+        item["角色"] = role
+        # logger.info(f"开始时间：{start_date},结束时间:{end_date}")
+        
+        #特殊处理，将第一条记录的结束时间修改为”至今“
+        random_data[0]["结束时间"] = "至今"
+
     logger.info(f"随机选中{select_count}条数据：{random_data}")
     return random_data
 
@@ -131,6 +184,8 @@ def fill_word_template(template_path,excel_row,resume_data,save_path):
         "专业": excel_row["专业"],
         "学历": excel_row["学历"],
         "司龄": excel_row["司龄"],
+        "毕业时间": excel_row["毕业时间"],
+        "入职时间": excel_row["入职时间"],
         "担任现有职务年限": excel_row["担任现有职务年限"],
         "服务地点": excel_row["服务地点"],
         "random_data": resume_data

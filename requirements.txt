@@ -1,5 +1,10 @@
-
-
+faiss-cpu
+jieba
+langchain
+langchain-community
+matplotlib
 numpy=1.26.4
+openai
 pandas=2.3.3
 python=3.12.12
+torch
