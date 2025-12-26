@@ -105,24 +105,18 @@ def get_resume_list(row,raw_data):
     current_date = datetime.now()
     delta = relativedelta(current_date,graduation_date)
     total_months = delta.years * 12 + delta.months
-    # print(f"从{graduation_date}到{current_date}的月数差是：{total_months}")
     select_count  = get_resume_count(row["级别"])
     
-    #大概平均每个项目多少个月
+    #项目平均月数
     project_months = int(total_months / select_count)
-    # logger.info(f"项目平均月数是：{project_months}")
-    # new_date = graduation_date + relativedelta(months=project_months)
-    # logger.info(f"预计项目结束日期为：{new_date}")
-    # formatted_date = new_date.strftime("%Y/%m")
-    # print(formatted_date)
     role = row["职位"]
-    # logger.info(f"毕业时间：{graduation_date}，入职时间：{entry_date}")
     random_data = random.sample(raw_data, select_count)
     for idx,item in enumerate(random_data):
         project_scale = random.randint(10, 40) #项目规模
         mgr_cnt = int(project_scale / 5) #管理团队人数
         item["项目规模"] = project_scale
         item["管理团队人数"] = mgr_cnt
+        project_months = random.randint(project_months - 1, project_months + 1)
         if idx == 0:
             start_date = (current_date - relativedelta(months=project_months))
             end_date = current_date
@@ -135,8 +129,7 @@ def get_resume_list(row,raw_data):
             start_date = (end_date - relativedelta(months=project_months))
             project_status = "已完成"
         
-         # 如果入职时间在开始时间与结束时间之间，则将项目状态设置为"进行中"
-        # print(f"项目的开始时间是{start_date}，结束时间是{end_date}，入职时间是{entry_date}")
+         # 如果入职时间在开始时间与结束时间之间，则开始时间与结束时间离入职时间最近的取入职时间
         if start_date <= entry_date and entry_date <= end_date:
             delta = relativedelta(entry_date,start_date)
             start_months = delta.years * 12 + delta.months
@@ -153,7 +146,6 @@ def get_resume_list(row,raw_data):
         item["结束时间"] = end_date.strftime("%Y/%m")
         item["项目状态"] = project_status
         item["角色"] = role
-        # logger.info(f"开始时间：{start_date},结束时间:{end_date}")
         
         #特殊处理，将第一条记录的结束时间修改为”至今“
         random_data[0]["结束时间"] = "至今"
@@ -195,6 +187,7 @@ def fill_word_template(template_path,excel_row,resume_data,save_path):
       # 保存文件
     template.save(save_path)
 
+import sqlite3
 def get_josn_data(file_path):
     # 读取JSON数据
     try:
@@ -206,6 +199,30 @@ def get_josn_data(file_path):
         logger.error("读取JSON失败",e)
     return raw_data
 
+def query_data(database, query):
+    conn = sqlite3.connect(database)  # 连接数据库
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()  # 创建游标对象
+    cursor.execute(query)  # 执行查询语句
+    result = cursor.fetchall()  # 获取查询结果
+    conn.close()  # 关闭数据库连接
+    cursor.close
+    return result
+def get_proj_data():
+    db = "D:/software/database/sqlite/db/resume.db"
+    qry_sql = "select * from project_data"
+    results = query_data(db, qry_sql)
+    print(results)
+    datalist = []
+    for row in results:
+        row_dict = {}
+        print(row["proj_nm"],row["proj_cust"])
+        row_dict["项目名称"]= row["proj_nm"]
+        row_dict["项目实施用户"]= row["proj_cust"]
+        datalist.append(row_dict)
+    return datalist
+
+
 def main():
     logger.info("......初始化目录......")
     init_dir(SAVE_DIR)
@@ -214,7 +231,7 @@ def main():
     df_excel = get_excel_data()
 
     logger.info("......获取项目信息......")
-    raw_data = get_josn_data(JSON_PATH)
+    raw_data = get_proj_data()
         
     logger.info("......生成简历......")
     for index, row in df_excel.iterrows():
