@@ -13,28 +13,25 @@ FORMAT='%(asctime)s - %(funcName)s - %(levelname)s - %(message)s'
 logging.basicConfig(filename=None,filemode='a',format=FORMAT, encoding='utf-8',level=logging.DEBUG)
 
 from src import Resume
-from src import YamlReader
-def main(cfg):
-    print("===== 鸢尾花分类器 AI 项目 =====")
-    if not cfg:
-        return -1
-    
-    print(cfg)
-    ff = cfg[0]
-    resume = Resume(ff["resume"]["word_template"],ff["resume"]["excel_file"])
-    resume.execute()
+def main():
+    try:
+        resume = Resume(WORD_TEMPLATE,EXCEL_FILE,SAVE_DIR)
+        resume.execute()
+        logger.info(f"全部文件生成完成！保存路径：{SAVE_DIR}")
+    except Exception as e:
+        logger.error(f"生成文件失败！错误信息：{e}")
+        raise e
     return 0
-
-import argparse
 
 if __name__ == '__main__':
     logger.info("we are studying python.")
-    parser = argparse.ArgumentParser()
     CURR_PATH = os.path.dirname(os.path.abspath(__file__))
     print(f"当前路径: {CURR_PATH}")
-    EXCEL_FILE = os.path.join(CURR_PATH, "../config/config.yaml")
-    parser.add_argument("--config", "-c", help="Path to the configuration file",type=str,default=EXCEL_FILE)
-    rtn = parser.parse_args()
-    if rtn.config and os.path.exists(rtn.config):
-        cfg = YamlReader(rtn.config)
-    sys.exit(main(cfg.read()))
+
+    EXCEL_FILE = "toubiao.xlsx"       # Excel文件路径 
+    WORD_TEMPLATE = "resume_template.docx"   # Word模板路径
+    SAVE_DIR = "C:/Users/fangyh/Desktop/resumes/"   # 生成文件保存目录
+
+    EXCEL_FILE = os.path.join(CURR_PATH, "../data/resume/"+ EXCEL_FILE)
+    WORD_TEMPLATE = os.path.join(CURR_PATH, "../data/resume/"+WORD_TEMPLATE)
+    sys.exit(main())

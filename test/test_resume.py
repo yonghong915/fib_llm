@@ -4,12 +4,8 @@ import sys
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(project_root)
 
-from src import JSONReader,doResume
-
-json_reader = JSONReader("E:/workspace/ws_python/fib_llm/data/resume/pro_data.json")
-json_data = json_reader.read()
-json_meta = json_reader.get_metadata()
-print("\n=== JSON 元信息 ===")
-print(f"元素类型: {json_meta['element_type']}, 元素数量: {json_meta.get('element_count', 'N/A')}")
-print(f"数据: {json_data[:2] if isinstance(json_data, list) else json_data}")
-doResume()
+from src import DBUtil
+config = {"database": "D:/software/database/sqlite/db/resume.db","datatype":"sqlite"}
+dbutil = DBUtil(config)
+data = dbutil.query("select * from project_data")
+print(data)

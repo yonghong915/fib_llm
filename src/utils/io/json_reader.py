@@ -8,9 +8,13 @@ class JSONReader(BaseDataReader):
         """读取JSOn文件"""
         if not self._validate_file_format():
            raise ValueError("文件路径非JSON格式")
-        
-        with open(self.file_path, "r",encoding="utf-8") as f:
-            data = json.load(f)
+        try:
+            with open(self.file_path, "r",encoding="utf-8") as f:
+                data = json.load(f)
+                if not isinstance(data, list):
+                   raise ValueError("JSON数据必须是数组格式")
+        except Exception as e:
+            raise Exception("读取JSON失败",e)
         return data
     
     def get_metadata(self) -> dict[str,Any]:

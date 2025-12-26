@@ -3,10 +3,16 @@ import pandas as pd
 from docx import Document
 from docxtpl import DocxTemplate
 import logging
-import json
 import random
 import time
 from datetime import datetime
+from dateutil.relativedelta import relativedelta
+
+# 将项目根目录添加到sys.path中
+import sys
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(project_root)
+from utils import DBUtil
 # ====================== 1. 配置项（改这里！适配你的业务） ======================
 # Excel配置
 EXCEL_FILE = "toubiao.xlsx"       # Excel文件路径
@@ -20,7 +26,6 @@ NULL_DEFAULT = "无"               # 空值默认填充内容
 CURR_PATH = os.path.dirname(os.path.abspath(__file__))
 EXCEL_FILE = os.path.join(CURR_PATH, "../../data/resume/"+ EXCEL_FILE)
 WORD_TEMPLATE = os.path.join(CURR_PATH, "../../data/resume/"+WORD_TEMPLATE)
-JSON_PATH = os.path.join(CURR_PATH, "../../data/resume/"+"pro_data.json")
 
 logger = logging.getLogger(__name__)
 FORMAT='%(asctime)s - %(funcName)s - %(levelname)s - %(message)s'
@@ -30,224 +35,180 @@ class Resume:
     """
     Resume类，生成简历
     """
-    def __init__(self, template_path: str, json_path: str):
+    def __init__(self, template_path: str, excel_path: str,save_path:str):
         self.template_path = template_path
-        self.json_path = json_path
-        self.template = self.load_template()
-        self.json_data = self.load_json()
+        self.excel_path = excel_path
+        self.save_path = save_path
 
-    def load_template(self) -> str:
+    def get_excel_data(self):
+        """读取Excel数据，清洗并去重"""
+        df = pd.read_excel(self.excel_path, sheet_name=EXCEL_SHEET)[EXCEL_FIELDS]
+        df = df.fillna(NULL_DEFAULT).drop_duplicates(subset=[EXCEL_KEY])  # 去重+补空值
+        return df
+
+    def fill_word_template(self,template_path,excel_row,resume_data,save_path):
         """
-        加载模板
-        :return: 模板内容
+        填充Word模板（核心：保样式）
+        :param template_path: Word模板路径
+        :param excel_row: Excel单行数据（字典）
+        :param resume_data: 当前简历数据（字典）
+        :param save_path: 生成文件保存路径
         """
-    
-    def load_json(self) -> dict:
-        """
-        加载JSON数据
-        :return: JSON数据
-        """
-    
-    def generate_prompt(self, json_data: dict) -> str:
-        """
-        生成提示
-        :param json_data: JSON数据
-        :return: 提示内容
-        """
-    
-    def generate_response(self, prompt: str) -> str:
-        """
-        生成响应
-        :param prompt: 提示内容
-        :return: 响应内容
-        """
-    
+        # 准备模板数据
+        context = {
+            "序号": excel_row["序号"],
+            "工号": excel_row["工号"],
+            "姓名": excel_row["姓名"],
+            "身份证": excel_row["身份证"],
+            "性别": excel_row["性别"],
+            "年龄": excel_row["年龄"],
+            "职位": excel_row["职位"],
+            "级别": excel_row["级别"],
+            "职称": excel_row["职称"],
+            "毕业院校": excel_row["毕业院校"],
+            "专业": excel_row["专业"],
+            "学历": excel_row["学历"],
+            "司龄": excel_row["司龄"],
+            "毕业时间": excel_row["毕业时间"],
+            "入职时间": excel_row["入职时间"],
+            "担任现有职务年限": excel_row["担任现有职务年限"],
+            "服务地点": excel_row["服务地点"],
+            "random_data": resume_data
+        }
+        template = DocxTemplate(template_path)
+        template.render(context)  # 将数据填充到模板
+        # 保存文件
+        template.save(save_path)
     def execute(self) -> str:
         """
         执行
         :param json_data: JSON数据
         :return: 响应内容
         """
-        prompt = self.generate_prompt("json_data")
-        response = self.generate_response(prompt)
-        return response
+        logger.info("......初始化目录......")
+        init_dir(self.save_path)
+
+        logger.info("......获取excel数据......")
+        df_excel = self.get_excel_data()
+
+        logger.info("......获取项目信息......")
+        raw_data = self.get_proj_data()
+        
+        logger.info("......生成简历......")
+        for index, row in df_excel.iterrows():
+            resume_data = self.get_resume_list(row, raw_data)
+            writer = row["编写人"]
+            save_path = os.path.join(SAVE_DIR, writer)
+            if not os.path.exists(save_path):
+               os.makedirs(save_path)
+
+            FILE_NAME_RULE = str(row['序号'])+"-"+row['级别']+"-"+row['职位']+"-"+row['姓名']+".docx" # 生成文件命名规则
+            save_path= save_path+"/"+ FILE_NAME_RULE
+
+            self.fill_word_template(WORD_TEMPLATE,row,resume_data,save_path)
+            logger.info(f"已生成第{index+1}份简历")
+            time.sleep(1)
+    
+    def get_proj_data(self):
+        """从数据库中获取项目数据"""
+        config = {"database": "D:/software/database/sqlite/db/resume.db","datatype":"sqlite"}
+        dbutil = DBUtil(config)
+        qry_sql = "select * from project_data"
+        results = dbutil.query(qry_sql)
+        datalist = []
+        for row in results:
+            row_dict = {}
+            row_dict["项目名称"]= row["proj_nm"]
+            row_dict["项目实施用户"]= row["proj_cust"]
+            datalist.append(row_dict)
+        return datalist
+
+    def get_resume_list(self,row,raw_data):
+        """获取简历列表"""
+        graduation_date = row["毕业时间"]
+        entry_date = row["入职时间"]
+
+        #项目人数范围
+        MIN_PERSONS = 10
+        MAX_PERSONS = 40
+        #管理团队占比
+        MANAGEMENT_RATIO = 0.2
+
+        # 获取当前日期
+        current_date = datetime.now()
+        delta = relativedelta(current_date,graduation_date)
+        total_months = delta.years * 12 + delta.months
+        select_count  = self.__get_resume_count(row["级别"])
+    
+        #项目平均月数
+        project_months = int(total_months / select_count)
+        role = row["职位"]
+        random_data = random.sample(raw_data, select_count)
+        for idx,item in enumerate(random_data):
+            project_scale = random.randint(MIN_PERSONS, MAX_PERSONS) #项目规模
+            mgr_cnt = int(project_scale * MANAGEMENT_RATIO) #管理团队人数
+            item["项目规模"] = project_scale
+            item["管理团队人数"] = mgr_cnt
+            project_months = random.randint(project_months - 1, project_months + 1)
+            if idx == 0:
+                start_date = (current_date - relativedelta(months=project_months))
+                end_date = current_date
+                project_status = "在执行"
+            elif idx == select_count -1:
+                end_date = start_date
+                start_date = graduation_date
+            else:
+                end_date = start_date
+                start_date = (end_date - relativedelta(months=project_months))
+                project_status = "已完成"
+        
+            # 如果入职时间在开始时间与结束时间之间，则开始时间与结束时间离入职时间最近的取入职时间
+            if start_date <= entry_date and entry_date <= end_date:
+                delta = relativedelta(entry_date,start_date)
+                start_months = delta.years * 12 + delta.months
+             
+                delta = relativedelta(end_date,entry_date)
+                end_months = delta.years * 12 + delta.months
+                if start_months >= end_months:
+                    end_date = entry_date
+                    
+                    # 特殊处理，将上一条记录的开始时间修改为入职时间
+                    random_data[idx -1]["开始时间"] = entry_date.strftime("%Y/%m")
+                else:
+                    start_date = entry_date
+            item["开始时间"] = start_date.strftime("%Y/%m")
+            item["结束时间"] = end_date.strftime("%Y/%m")
+            item["项目状态"] = project_status
+            item["角色"] = role
+        
+            #特殊处理，将第一条记录的结束时间修改为”至今“
+            random_data[0]["结束时间"] = "至今"
+
+        logger.info(f"随机选中{select_count}条数据：{random_data}")
+        return random_data
+
+
+    def __get_resume_count(self,level):
+        """获取简历数量"""
+        select_count = 3
+        if level == "初级":
+            select_count = 3
+        elif level == "中级":
+            select_count = 5
+        elif level == "高级":
+            select_count = 7
+        elif level == "专家级":
+            select_count = 9
+        return select_count
+
 # ====================== 2. 工具函数（通用，无需修改） ======================
 def init_dir(dir_path):
     """初始化保存目录，不存在则创建"""
     if not os.path.exists(dir_path):
         os.makedirs(dir_path)
-
-def get_excel_data():
-    """读取Excel数据，清洗并去重"""
-    df = pd.read_excel(EXCEL_FILE, sheet_name=EXCEL_SHEET)[EXCEL_FIELDS]
-    df = df.fillna(NULL_DEFAULT).drop_duplicates(subset=[EXCEL_KEY])  # 去重+补空值
-    return df
-
-from dateutil.relativedelta import relativedelta
-def get_resume_count(level):
-    """获取简历数量"""
-    select_count = 3
-    if level == "初级":
-        select_count = 3
-    elif level == "中级":
-        select_count = 5
-    elif level == "高级":
-        select_count = 7
-    elif level == "专家级":
-        select_count = 9
-    return select_count
-
-def get_resume_list(row,raw_data):
-    """获取简历列表"""
-    graduation_date = row["毕业时间"]
-    entry_date = row["入职时间"]
-    # 获取当前日期
-    current_date = datetime.now()
-    delta = relativedelta(current_date,graduation_date)
-    total_months = delta.years * 12 + delta.months
-    select_count  = get_resume_count(row["级别"])
-    
-    #项目平均月数
-    project_months = int(total_months / select_count)
-    role = row["职位"]
-    random_data = random.sample(raw_data, select_count)
-    for idx,item in enumerate(random_data):
-        project_scale = random.randint(10, 40) #项目规模
-        mgr_cnt = int(project_scale / 5) #管理团队人数
-        item["项目规模"] = project_scale
-        item["管理团队人数"] = mgr_cnt
-        project_months = random.randint(project_months - 1, project_months + 1)
-        if idx == 0:
-            start_date = (current_date - relativedelta(months=project_months))
-            end_date = current_date
-            project_status = "在执行"
-        elif idx == select_count -1:
-            end_date = start_date
-            start_date = graduation_date
-        else:
-            end_date = start_date
-            start_date = (end_date - relativedelta(months=project_months))
-            project_status = "已完成"
-        
-         # 如果入职时间在开始时间与结束时间之间，则开始时间与结束时间离入职时间最近的取入职时间
-        if start_date <= entry_date and entry_date <= end_date:
-            delta = relativedelta(entry_date,start_date)
-            start_months = delta.years * 12 + delta.months
-             
-            delta = relativedelta(end_date,entry_date)
-            end_months = delta.years * 12 + delta.months
-            if start_months >= end_months:
-                end_date = entry_date
-                print(random_data[idx -1]["开始时间"])
-                random_data[idx -1]["开始时间"] = entry_date.strftime("%Y/%m")
-            else:
-                start_date = entry_date
-        item["开始时间"] = start_date.strftime("%Y/%m")
-        item["结束时间"] = end_date.strftime("%Y/%m")
-        item["项目状态"] = project_status
-        item["角色"] = role
-        
-        #特殊处理，将第一条记录的结束时间修改为”至今“
-        random_data[0]["结束时间"] = "至今"
-
-    logger.info(f"随机选中{select_count}条数据：{random_data}")
-    return random_data
-
-def fill_word_template(template_path,excel_row,resume_data,save_path):
-    """
-    填充Word模板（核心：保样式）
-    :param template_path: Word模板路径
-    :param excel_row: Excel单行数据（字典）
-    :param resume_data: 当前简历数据（字典）
-    :param save_path: 生成文件保存路径
-    """
-    # 准备模板数据
-    context = {
-        "序号": excel_row["序号"],
-        "工号": excel_row["工号"],
-        "姓名": excel_row["姓名"],
-        "身份证": excel_row["身份证"],
-        "性别": excel_row["性别"],
-        "年龄": excel_row["年龄"],
-        "职位": excel_row["职位"],
-        "级别": excel_row["级别"],
-        "职称": excel_row["职称"],
-        "毕业院校": excel_row["毕业院校"],
-        "专业": excel_row["专业"],
-        "学历": excel_row["学历"],
-        "司龄": excel_row["司龄"],
-        "毕业时间": excel_row["毕业时间"],
-        "入职时间": excel_row["入职时间"],
-        "担任现有职务年限": excel_row["担任现有职务年限"],
-        "服务地点": excel_row["服务地点"],
-        "random_data": resume_data
-      }
-    template = DocxTemplate(template_path)
-    template.render(context)  # 将数据填充到模板
-      # 保存文件
-    template.save(save_path)
-
-import sqlite3
-def get_josn_data(file_path):
-    # 读取JSON数据
-    try:
-      with open(file_path, 'r', encoding='utf-8') as f:
-            raw_data = json.load(f)
-            if not isinstance(raw_data, list):
-              raise ValueError("JSON数据必须是数组格式")
-    except Exception as e:
-        logger.error("读取JSON失败",e)
-    return raw_data
-
-def query_data(database, query):
-    conn = sqlite3.connect(database)  # 连接数据库
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()  # 创建游标对象
-    cursor.execute(query)  # 执行查询语句
-    result = cursor.fetchall()  # 获取查询结果
-    conn.close()  # 关闭数据库连接
-    cursor.close
-    return result
-def get_proj_data():
-    db = "D:/software/database/sqlite/db/resume.db"
-    qry_sql = "select * from project_data"
-    results = query_data(db, qry_sql)
-    print(results)
-    datalist = []
-    for row in results:
-        row_dict = {}
-        print(row["proj_nm"],row["proj_cust"])
-        row_dict["项目名称"]= row["proj_nm"]
-        row_dict["项目实施用户"]= row["proj_cust"]
-        datalist.append(row_dict)
-    return datalist
-
-
 def main():
-    logger.info("......初始化目录......")
-    init_dir(SAVE_DIR)
-
-    logger.info("......获取excel数据......")
-    df_excel = get_excel_data()
-
-    logger.info("......获取项目信息......")
-    raw_data = get_proj_data()
-        
-    logger.info("......生成简历......")
-    for index, row in df_excel.iterrows():
-        resume_data = get_resume_list(row, raw_data)
-        writer = row["编写人"]
-        save_path = os.path.join(SAVE_DIR, writer)
-        if not os.path.exists(save_path):
-           os.makedirs(save_path)
-
-        FILE_NAME_RULE = str(row['序号'])+"-"+row['级别']+"-"+row['职位']+"-"+row['姓名']+".docx" # 生成文件命名规则
-        save_path= save_path+"/"+ FILE_NAME_RULE
-
-        fill_word_template(WORD_TEMPLATE,row,resume_data,save_path)
-        logger.info(f"已生成第{index+1}份简历")
-        time.sleep(1)
-        # clear_output()
+    resume = Resume(WORD_TEMPLATE,EXCEL_FILE,SAVE_DIR)
+    resume.execute()
     logger.info(f"全部文件生成完成！保存路径：{SAVE_DIR}")
 
 # ====================== 3. 主流程（一键运行） ======================
