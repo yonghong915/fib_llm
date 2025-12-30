@@ -10,12 +10,16 @@ __all__ = [
     "DBUtil",
 
     # 业务模块
-    "Resume"
+    "Resume",
+
+    # TCM模块
+    "TCMmain"
 ]
 
 from .utils import CSVReader,JSONReader,ExcelReader,YamlReader
 from .resume import Resume
 from .utils import DBUtil
+from .tcm import TCMmain
 
 __version__ = "1.0.0"
 __author__ = "fangyh"
